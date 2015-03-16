@@ -40,6 +40,32 @@ my @tests= (
 	  points => [ [0,1], [1,2], [0.5,1] ],
 	  exception => qr/domain.*sorted/i,
 	},
+	# extrapolate off the end of the last line
+	{ name => 'extrapolate',
+	  points => [ [1,1], [2,1], [3,0] ],
+	  domain_edge => 'extrapolate',
+	  test => [ [0,1], [-1000,1], [1,1], [2,1], [3,0], [4,-1], [5,-2], [1000,-997] ],
+	},
+	# return undef outside of the domain
+	{ name => 'undef outside domain',
+	  points => [ [5,1], [5,2], [6,2], [6,1] ],
+	  domain_edge => 'undef',
+	  test => [ [4.9999, undef], [5,2], [6,1], [6.0001, undef] ],
+	},
+	# error on invalid domain
+	{ name => 'undef outside domain',
+	  points => [ [5,1], [5,2], [6,2], [6,1] ],
+	  domain_edge => 'die',
+	  test => [ [4.9999, undef] ],
+	  exception => qr/bounds.*<5/
+	},
+	# error on invalid domain
+	{ name => 'undef outside domain',
+	  points => [ [5,1], [5,2], [6,2], [6,1] ],
+	  domain_edge => 'die',
+	  test => [ [5,2], [6,1], [6.0001, undef] ],
+	  exception => qr/bounds.*>6/
+	},
 );
 
 for my $interp (@tests) {
@@ -53,8 +79,13 @@ for my $interp (@tests) {
 			);
 			my $fn= $interpolation->fn;
 			for (@{ $interp->{test} }) {
-				is_near( $fn->( $_->[0] ), $_->[1], .000001, 'fn('.$_->[0].')' )
-					or diag $interpolation->perl_code;
+				my $y= $fn->( $_->[0] );
+				if (defined $y && defined $_->[1]) {
+					is_near( $y, $_->[1], .000001, 'fn('.$_->[0].')' )
+						or diag $interpolation->perl_code;
+				} else {
+					is( $y, $_->[1], 'fn('.$_->[0].')' );
+				}
 			}
 			if ($interp->{exception}) {
 				fail "Didn't get exception $interp->{exception}";

@@ -90,8 +90,19 @@ sub _gen_linear {
 		push @expressions, [ $domain->[$i-1], '$x * '.$m.' + '.$b ];
 	}
 	if ($self->domain_edge eq 'clamp') {
-		unshift @expressions, [ undef, ''.$domain->[0] ];
-		push    @expressions, [ $domain->[-1], ''.$domain->[-1] ];
+		unshift @expressions, [ undef, $domain->[0] ];
+		push    @expressions, [ $domain->[-1], $domain->[-1] ];
+	}
+	elsif ($self->domain_edge eq 'extrapolate') {
+		# just let the edge expressions do their thing
+	}
+	elsif ($self->domain_edge eq 'undef') {
+		unshift @expressions, [ undef, 'undef' ];
+		push    @expressions, [ $domain->[-1], '$x == '.$domain->[-1].'? ('.$range->[-1].') : undef' ];
+	}
+	elsif ($self->domain_edge eq 'die') {
+		unshift @expressions, [ undef, 'die "argument out of bounds (<'.$domain->[0].')"' ];
+		push    @expressions, [ $domain->[-1], '$x == '.$domain->[-1].'? ('.$range->[-1].') : die "argument out of bounds (>'.$domain->[-1].')"' ];
 	}
 	else {
 		croak "Algorithm 'linear' does not support domain-edge '".$self->domain_edge."'";
