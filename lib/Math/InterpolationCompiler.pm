@@ -8,21 +8,22 @@ use Carp;
 =head1 SYNOPSIS
 
   my $fn= Math::InterpolationCompiler->new(
-    domain      => [ 1, 2, 3, 4, 5 ],
+    domain      => [ 1,   2,   3,   4,   5    ],
     range       => [ 1.9, 1.3, 1.2, 1.1, 1.05 ],
     algorithm   => 'linear',
     domain_edge => 'die',
   )->fn;
   print $fn->(3);   # 1.2
   print $fn->(3.5); # 1.15
+  print $fn->(9);   # throws exception
 
 =head1 DESCRIPTION
 
 This module is much the same theme as L<Math::Interpolate> and
-L<Math::Interpolator::Linear> but it compiles the linear interpolations into
-actual Perl code, and pre-calculates all the numbers so that the end result is
-Log_base2(N) comparisons and a multiply and an add.
-This makes it very fast for repeated calls.
+L<Math::Interpolator::Linear> but it compiles the interpolations into actual
+Perl code, and pre-calculates all the numbers so that the end result is
+Log2(N) comparisons and a multiply and an add, all done at the
+interpreter level.  This makes it very fast for repeated calls.
 
 Use this module if you have a few smallish data plots which you want to
 evaluate very quickly over and over again.
@@ -32,12 +33,13 @@ frequently, if your data points are not plain scalars, or if you are extremely
 worried about code-injection attacks.
 (this module sanitizes the numbers you give it, but it is still generating
 perl code and in security-critical environments with un-trusted input your
-best bet is to just avoid all string-evals).
+best bet is to just avoid all string evals).
 
 This generator is written as a Perl object which produces a coderef.  This
 makes the generator easy to extend and re-use pieces for various goals.
-However the OO design is really just a convenient way of calling one
-complicated function with lots of argument varieties.
+However the OO design is somewhat unnecessary, and really just a convenient
+implementation thanks to L<Moo>.  In other words, the object doesn't have
+much use other than performing a one-time job.
 
 =head1 ATTRIBUTES
 
