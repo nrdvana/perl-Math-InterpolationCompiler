@@ -3,6 +3,149 @@ use Moo;
 use Types::Standard 'ArrayRef';
 use Carp;
 
+# ABSTRACT: Compile interpolations into perl coderefs
+
+=head1 SYNOPSIS
+
+  my $fn= Math::InterpolationCompiler->new(
+    domain      => [ 1, 2, 3, 4, 5 ],
+    range       => [ 1.9, 1.3, 1.2, 1.1, 1.05 ],
+    algorithm   => 'linear',
+    domain_edge => 'die',
+  )->fn;
+  print $fn->(3);   # 1.2
+  print $fn->(3.5); # 1.15
+
+=head1 DESCRIPTION
+
+This module is much the same theme as L<Math::Interpolate> and
+L<Math::Interpolator::Linear> but it compiles the linear interpolations into
+actual Perl code, and pre-calculates all the numbers so that the end result is
+Log_base2(N) comparisons and a multiply and an add.
+This makes it very fast for repeated calls.
+
+Use this module if you have a few smallish data plots which you want to
+evaluate very quickly over and over again.
+
+DO NOT use this module if you have an extremely large data array that changes
+frequently, if your data points are not plain scalars, or if you are extremely
+worried about code-injection attacks.
+(this module sanitizes the numbers you give it, but it is still generating
+perl code and in security-critical environments with un-trusted input your
+best bet is to just avoid all string-evals).
+
+This generator is written as a Perl object which produces a coderef.  This
+makes the generator easy to extend and re-use pieces for various goals.
+However the OO design is really just a convenient way of calling one
+complicated function with lots of argument varieties.
+
+=head1 ATTRIBUTES
+
+=head2 domain
+
+The input values ('x') of the function.
+Domain must be sorted in non-decreasing order.
+
+=head2 range
+
+The output values ('y') of the function.
+
+=head2 algorithm
+
+The name of the algorithm to create:
+
+=over
+
+=item linear
+
+Create a linear interpolation, where an input ('x') is matched to the interval
+containing that value, and the return value is
+
+  y = x * (y_next - y_prev) / (x_next - x_prev)
+
+If a zero-width range is encountered (a discontinuity in the line) the 'x'
+values less than the discontinuity use the left-hand segment, and the 'x'
+values equal to or to the right of the discontinuity use the right-hand
+segment.
+
+Example:
+
+  # domain => [ 1, 2, 2, 3 ],
+  # range  => [ 0, 0, 1, 1 ],
+  $fn->(1);   # equals 0
+  $fn->(1.9); # equals 0
+  $fn->(2);   # equals 1
+  #fn->(3);   # equals 1
+
+=back
+
+=head2 domain_edge
+
+The behavior of the generated function when an input value ('x') lies outside
+the domain of the function.
+
+=over
+
+=item clamp
+
+If 'x' is less than the minimum valid 'x', use the minimum 'x'.
+If 'x' is greater than the maximum valid 'x', use the maximum 'x'.
+
+=item extrapolate
+
+If 'x' is less than the minimum valid 'x', extrapolate backwards from the
+first non-empty interval.  If 'x' is greater than the maximum valid 'x',
+extrapolate forward from the last non-empty interval.
+
+=item undef
+
+Return undef for any 'x' outside the domain for the function.
+
+=item die
+
+Die with an error for any 'x' outside of the domain for the function.
+
+=back
+
+=head2 perl_code
+
+Lazy-build the perl code for this function using the other attributes.
+Returns a string of perl code.
+
+=head2 fn
+
+Lazy-build the perl coderef for the L<perl_code> attribute.
+
+=head2 sanitize
+
+Boolean.  Whether or not to sanitize the domain and range with a 'number'
+regex during the constructor.  Defaults to true.
+
+Setting this to false leaves you open to code injection attacks, but you might
+choose to do that if you trust your input and you need a little performance
+boost on constructing this object.
+
+=head1 METHODS
+
+=head2 new
+
+Standard object constructor accepting any of the above attributes, but also
+accepting:
+
+=over
+
+=item points
+
+  ->new( points => [ [1,1], [2,2], [3,2], ... ] );
+
+For convenience, you can specify your domain and range as an arrayref of (x,y)
+pairs.  During BUILDARGS, this will get separated into the domain and range
+attributes.
+
+=back
+
+=cut
+
 has domain       => ( is => 'ro', isa => ArrayRef, required => 1 );
 has range        => ( is => 'ro', isa => ArrayRef, required => 1 );
 has algorithm    => ( is => 'ro', default => sub { 'linear' } );
@@ -27,6 +170,7 @@ sub BUILDARGS {
 }
 
 sub _validate_number {
+	$_[0]= "$_[0]";
 	$_[0] =~ /^[-+]?[0-9]*\.?[0-9]+([eE][-+]?[0-9]+)?$/
 		or croak "$_[0] is not a number";
 }
@@ -65,16 +209,7 @@ sub _build_fn {
 	return $sub;
 }
 
-#  0000  ( 1, 25.5 )     low_end_behavior
-#  0001  ( 1.5, 33.2 )   $x > 1? (y=x*m0+b0) : solve(0000)
-#  0010  ( 2, 34.4 )     (y=x*m1+b1)
-#  0011  ( 2.5, 55 )     $x > 2? (y=x*m2+b2) : solve(0010)
-#  0100  ( 3, 9 )
-#  0101                  high_end_behavior
-#
-#  code(0) = ( low_end_behavior )
-#  code(1) = ( $x < 1? code(0) : 
-
+# Create a linear interpolation
 sub _gen_linear {
 	my $self= shift;
 	my $domain= $self->domain;
