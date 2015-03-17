@@ -237,11 +237,16 @@ sub _gen_linear {
 		push @expressions, [ $domain->[$i-1], '$x * '.$m.' + '.$b ];
 	}
 	if ($self->beyond_domain eq 'clamp') {
-		unshift @expressions, [ undef, $domain->[0] ];
-		push    @expressions, [ $domain->[-1], $domain->[-1] ];
+		unshift @expressions, [ undef, $range->[0] ];
+		push    @expressions, [ $domain->[-1], $range->[-1] ];
 	}
 	elsif ($self->beyond_domain eq 'extrapolate') {
 		# just let the edge expressions do their thing
+		# ... unless there were discontinuities at the edges
+		unshift @expressions, [ undef, $range->[0] ]
+			if $domain->[0] == $domain->[1];
+		push    @expressions, [ $domain->[-1], $range->[-1] ]
+			if $domain->[-1] == $domain->[-2];
 	}
 	elsif ($self->beyond_domain eq 'undef') {
 		unshift @expressions, [ undef, 'undef' ];
