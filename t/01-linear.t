@@ -43,26 +43,26 @@ my @tests= (
 	# extrapolate off the end of the last line
 	{ name => 'extrapolate',
 	  points => [ [1,1], [2,1], [3,0] ],
-	  domain_edge => 'extrapolate',
+	  beyond_domain => 'extrapolate',
 	  test => [ [0,1], [-1000,1], [1,1], [2,1], [3,0], [4,-1], [5,-2], [1000,-997] ],
 	},
 	# return undef outside of the domain
 	{ name => 'undef outside domain',
 	  points => [ [5,1], [5,2], [6,2], [6,1] ],
-	  domain_edge => 'undef',
+	  beyond_domain => 'undef',
 	  test => [ [4.9999, undef], [5,2], [6,1], [6.0001, undef] ],
 	},
 	# error on invalid domain
 	{ name => 'undef outside domain',
 	  points => [ [5,1], [5,2], [6,2], [6,1] ],
-	  domain_edge => 'die',
+	  beyond_domain => 'die',
 	  test => [ [4.9999, undef] ],
 	  exception => qr/bounds.*<5/
 	},
 	# error on invalid domain
 	{ name => 'undef outside domain',
 	  points => [ [5,1], [5,2], [6,2], [6,1] ],
-	  domain_edge => 'die',
+	  beyond_domain => 'die',
 	  test => [ [5,2], [6,1], [6.0001, undef] ],
 	  exception => qr/bounds.*>6/
 	},
@@ -75,7 +75,7 @@ for my $interp (@tests) {
 			$interpolation= Math::InterpolationCompiler->new(
 				points => $interp->{points},
 				defined $interp->{algorithm}? (algorithm => $interp->{algorithm}) : (),
-				defined $interp->{domain_edge}? (domain_edge => $interp->{domain_edge}) : (),
+				defined $interp->{beyond_domain}? (beyond_domain => $interp->{beyond_domain}) : (),
 			);
 			my $fn= $interpolation->fn;
 			for (@{ $interp->{test} }) {
