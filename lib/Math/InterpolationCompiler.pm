@@ -1,7 +1,10 @@
 package Math::InterpolationCompiler;
-use Moo;
-use Types::Standard 'ArrayRef';
+use 5.006001;
+use Moo 2;
+use Types::Standard 1;
 use Carp;
+
+our $VERSION= '0.001000';
 
 # ABSTRACT: Compile interpolations into perl coderefs
 
@@ -154,8 +157,8 @@ attributes.
 
 =cut
 
-has domain        => ( is => 'ro', isa => ArrayRef, required => 1 );
-has range         => ( is => 'ro', isa => ArrayRef, required => 1 );
+has domain        => ( is => 'ro', isa => Types::Standard::ArrayRef, required => 1 );
+has range         => ( is => 'ro', isa => Types::Standard::ArrayRef, required => 1 );
 has algorithm     => ( is => 'ro', default => sub { 'linear' } );
 has beyond_domain => ( is => 'ro', default => sub { 'clamp' } );
 has perl_code     => ( is => 'lazy' );

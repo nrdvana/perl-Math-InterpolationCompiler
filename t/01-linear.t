@@ -3,7 +3,7 @@
 use strict;
 use warnings;
 
-use Test::More;
+use Test::More 1;
 use Data::Dumper;
 use Try::Tiny;
 
