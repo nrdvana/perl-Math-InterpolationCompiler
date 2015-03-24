@@ -85,7 +85,7 @@ The name of the algorithm to create:
 Create a linear interpolation, where an input ('x') is matched to the domain
 interval containing that value, and the return value is
 
-  y = x * (y_next - y_prev) / (x_next - x_prev)
+  Y = Y_0 + ( X - X_0 ) * dY / dX
 
 If a domain 'x' coordinate is specified more than once (describing infinite
 slope) it is treated as a discontinuity.  The 'x' values less than the
