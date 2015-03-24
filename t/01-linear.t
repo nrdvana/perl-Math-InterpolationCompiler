@@ -66,6 +66,16 @@ my @tests= (
 	  test => [ [5,2], [6,1], [6.0001, undef] ],
 	  exception => qr/bounds.*>6/
 	},
+	# odd/even array of points
+	{ name => 'points as odd/even pairs',
+	  points => [ 1 => 9, 2 => 7 ],
+	  test => [ [1,9], [2,7], [1.5,8] ],
+	},
+	# odd/even pairs with odd number of values
+	{ name => 'points array with uneven element count',
+	  points => [ 1 => 9, 2 => 7, 3 ],
+	  exception => qr/odd.*points/
+	},
 );
 
 for my $interp (@tests) {
@@ -103,5 +113,17 @@ for my $interp (@tests) {
 		done_testing;
 	};
 }
+
+subtest exports => sub {
+	my $fn= eval "use Math::InterpolationCompiler 'linear_clamp_fn'; linear_clamp_fn([ 1 => 1,  2 => 3 ])";
+	ok( defined $fn, 'linear_clamp_fn' )
+		and is( $fn->(3), 3, 'linear_clamp_fn value' );
+	
+	$fn= eval "use Math::InterpolationCompiler 'linear_extrapolate_fn'; linear_extrapolate_fn([ 1 => 1, 2 => 3 ])";
+	ok( defined $fn, 'linear_extrapolate_fn' )
+		and is( $fn->(3), 5, 'linear_extrapolate_fn value' );
+	
+	done_testing;
+};
 
 done_testing;

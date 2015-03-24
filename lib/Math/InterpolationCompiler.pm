@@ -3,8 +3,11 @@ use 5.006001;
 use Moo 2;
 use Types::Standard 1;
 use Carp;
+use Exporter 'import';
 
-our $VERSION= '0.001000';
+our @EXPORT_OK= qw( linear_clamp_fn linear_extrapolate_fn );
+
+our $VERSION= '0.002000';
 
 # ABSTRACT: Compile interpolations into perl coderefs
 
@@ -19,6 +22,21 @@ our $VERSION= '0.001000';
   print $fn->(3);   # 1.2
   print $fn->(3.5); # 1.15
   print $fn->(9);   # throws exception
+  
+  # The generated code:  (whitespace added for readability)
+  #
+  # sub {
+  #   my $x= shift;
+  #   return $x < 4?
+  #     ( $x < 2?
+  #        ( $x < 1? (croak "argument out of bounds (<1)") : ($x * -0.6 + 2.5) )
+  #       :( $x < 3? ($x * -0.1 + 1.5) : ($x * -0.0999999999999999 + 1.5) )
+  #     )
+  #     :( $x < 5?
+  #        ( $x * -0.05 + 1.3)
+  #       :( $x == 5? (1.05) : croak "argument out of bounds (>5)" )
+  #     );
+  # }
 
 =head1 DESCRIPTION
 
@@ -35,7 +53,7 @@ DO NOT use this module if you have an extremely large data array that changes
 frequently, if your data points are not plain scalars, or if you are extremely
 worried about code-injection attacks.
 (this module sanitizes the numbers you give it, but it is still generating
-perl code and in security-critical environments with un-trusted input your
+perl code and in security-critical environments with untrusted input your
 best bet is to just avoid all string evals).
 
 This generator is written as a Perl object which produces a coderef.  This
@@ -50,6 +68,7 @@ much use other than performing a one-time job.
 
 The input values ('x') of the function.
 Domain must be sorted in non-decreasing order.
+Repeated values can represent discontinuities in the line.
 
 =head2 range
 
@@ -63,15 +82,16 @@ The name of the algorithm to create:
 
 =item linear
 
-Create a linear interpolation, where an input ('x') is matched to the interval
-containing that value, and the return value is
+Create a linear interpolation, where an input ('x') is matched to the domain
+interval containing that value, and the return value is
 
   y = x * (y_next - y_prev) / (x_next - x_prev)
 
-If a zero-width segment is encountered (a discontinuity in the line) the 'x'
-values less than the discontinuity use the left-hand segment, and the 'x'
-values equal to or to the right of the discontinuity use the right-hand
-segment.
+If a domain 'x' coordinate is specified more than once (describing infinite
+slope) it is treated as a discontinuity.  The 'x' values less than the
+discontinuity are interpolated using the segment before the discontinuity, and
+the 'x' values equal or greater than the discontinuity use the segment after
+the discontinuity.
 
 Example:
 
@@ -82,10 +102,12 @@ Example:
   $fn->(2);   # equals 1
   #fn->(3);   # equals 2
 
-When beyond_domain is 'extrapolate' and a discontinuity occurs
-at the end of the domain, the interval beyond the domain gets a slope of 0.
+When beyond_domain is 'extrapolate' and a discontinuity occurs at the edge of
+the domain, the slope of the imaginary line outside of the domain is
+considered to be 0 (causing an effect like C<beyond_domain =E<gt> 'clamp'>).
 
 Example:
+
   # points => [[0,0], [0,1]]
   # beyond_domain => 'extrapolate'
   $fn->(x) # equals 0 for x < 0 and 1 for x >= 0
@@ -148,10 +170,13 @@ accepting:
 =item points
 
   ->new( points => [ [1,1], [2,2], [3,2], ... ] );
+  # or
+  ->new( points => [ 1 => 1, 2 => 2, 3 => 2, ... ] );
 
 For convenience, you can specify your domain and range as an arrayref of (x,y)
 pairs.  During BUILDARGS, this will get separated into the domain and range
-attributes.
+attributes.  The pairs can either be individual arrayrefs, or just odd/even
+elements of a single arrayref (but not a mix of the two).
 
 =back
 
@@ -170,9 +195,24 @@ sub BUILDARGS {
 	my $args= $self->next::method(@_);
 	if ($args->{points} && !$args->{domain} && !$args->{range}) {
 		my (@domain, @range);
-		for (@{ delete $args->{points} }) {
-			push @domain, $_->[0];
-			push @range,  $_->[1];
+		ref $args->{points} eq 'ARRAY'
+			or croak "points must be an arrayref";
+		# If points is an arrayref of arrayrefs, assume each point is a 2-element arrayref
+		if (ref $args->{points}[0]) {
+			for (@{ delete $args->{points} }) {
+				push @domain, $_->[0];
+				push @range,  $_->[1];
+			}
+		}
+		# else assume points is an arrayref with the x/y in odd/even slots
+		else {
+			my $flip= 0;
+			for (@{ delete $args->{points} }) {
+				$flip++ & 1? (push @range,  $_)
+					: (push @domain, $_);
+			}
+			!($flip & 1)
+				or croak "odd number of elements in points";
 		}
 		$args->{domain}= \@domain;
 		$args->{range}=  \@range;
@@ -256,8 +296,8 @@ sub _gen_linear {
 		push    @expressions, [ $domain->[-1], '$x == '.$domain->[-1].'? ('.$range->[-1].') : undef' ];
 	}
 	elsif ($self->beyond_domain eq 'die') {
-		unshift @expressions, [ undef, 'die "argument out of bounds (<'.$domain->[0].')"' ];
-		push    @expressions, [ $domain->[-1], '$x == '.$domain->[-1].'? ('.$range->[-1].') : die "argument out of bounds (>'.$domain->[-1].')"' ];
+		unshift @expressions, [ undef, 'Carp::croak("argument out of bounds (<'.$domain->[0].')")' ];
+		push    @expressions, [ $domain->[-1], '$x == '.$domain->[-1].'? ('.$range->[-1].') : Carp::croak("argument out of bounds (>'.$domain->[-1].')")' ];
 	}
 	else {
 		croak "Algorithm 'linear' does not support domain-edge '".$self->beyond_domain."'";
@@ -282,6 +322,52 @@ sub _gen_linear {
 	}
 	# finally, wrap with function
 	return "sub {\n my \$x= shift;\n return ".$expressions[0][1].";\n}\n";
+}
+
+=head1 EXPORTS
+
+This module contains a few exportable functions for convenience.
+
+=head2 linear_clamp_fn
+
+  $fn= linear_clamp_fn( \@points )
+  
+  # equivalent to:
+  $fn= Math::InterpolationCompiler->new(
+      algorithm => 'linear',
+      beyond_domain => 'clamp',
+      points => \@points
+    )->fn;
+
+=cut
+
+sub linear_clamp_fn {
+	Math::InterpolationCompiler->new(
+		algorithm => 'linear',
+		beyond_domain => 'clamp',
+		points => $_[0]
+	)->fn;
+}
+
+=head2 linear_extrapolate_fn
+
+  $fn= linear_clamp_fn( \@points )
+  
+  # equivalent to:
+  $fn= Math::InterpolationCompiler->new(
+      algorithm => 'linear',
+      beyond_domain => 'extrapolate',
+      points => \@points
+    )->fn;
+
+=cut
+
+sub linear_extrapolate_fn {
+	Math::InterpolationCompiler->new(
+		algorithm => 'linear',
+		beyond_domain => 'extrapolate',
+		points => $_[0]
+	)->fn;
 }
 
 1;
