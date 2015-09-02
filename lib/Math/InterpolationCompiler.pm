@@ -100,7 +100,7 @@ Example:
   $fn->(1);   # equals 0
   $fn->(1.9); # equals 0
   $fn->(2);   # equals 1
-  #fn->(3);   # equals 2
+  $fn->(3);   # equals 2
 
 When beyond_domain is 'extrapolate' and a discontinuity occurs at the edge of
 the domain, the slope of the imaginary line outside of the domain is
@@ -351,7 +351,7 @@ sub linear_clamp_fn {
 
 =head2 linear_extrapolate_fn
 
-  $fn= linear_clamp_fn( \@points )
+  $fn= linear_extrapolate_fn( \@points )
   
   # equivalent to:
   $fn= Math::InterpolationCompiler->new(
